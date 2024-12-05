@@ -51,38 +51,9 @@ namespace Repositories
         public async Task<Reservation> CreateReservation(Reservation newReservation)
         {
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
             if (newReservation.Id == Guid.Empty)
-
-
-
-
-
             {
                 newReservation.Id = Guid.NewGuid();
-
-
             }
 
             if (_db is Microsoft.Data.Sqlite.SqliteConnection sqliteConnection)
@@ -95,12 +66,6 @@ namespace Repositories
             else
             {
                 throw new InvalidOperationException("Database connection is not of type SQLiteConnection.");
-
-
-
-
-
-
             }
 
             using (var transaction = _db.BeginTransaction())
@@ -132,9 +97,9 @@ namespace Repositories
 
                     var result = await _db.ExecuteAsync(
                         @"
-                INSERT INTO Reservations (Id, GuestEmail, RoomNumber, Start, End, CheckedIn, CheckedOut)
-                VALUES (@Id, @GuestEmail, @RoomNumber, @Start, @End, @CheckedIn, @CheckedOut);
-                ",
+                        INSERT INTO Reservations (Id, GuestEmail, RoomNumber, Start, End, CheckedIn, CheckedOut)
+                        VALUES (@Id, @GuestEmail, @RoomNumber, @Start, @End, @CheckedIn, @CheckedOut);
+                        ",
                         new
                         {
                             Id = newReservation.Id.ToString(),
@@ -182,6 +147,26 @@ namespace Repositories
             );
 
             return deleted > 0;
+        }
+
+        public async Task<IEnumerable<Reservation>> GetUpcomingReservations()
+        {
+            var now = DateTime.UtcNow;
+            var query = @"
+                SELECT * 
+                FROM Reservations 
+                WHERE Start > @Now
+                ORDER BY Start ASC
+            ";
+
+            var reservations = await _db.QueryAsync<ReservationDb>(query, new { Now = now });
+
+            if (reservations == null || !reservations.Any())
+            {
+                return new List<Reservation>();
+            }
+
+            return reservations.Select(r => r.ToDomain());
         }
     }
 }

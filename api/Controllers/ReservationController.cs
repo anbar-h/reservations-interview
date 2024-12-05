@@ -126,6 +126,26 @@ namespace Controllers
                 return StatusCode(500, "An error occurred while deleting the reservation.");
             }
         }
+
+        [HttpGet("upcoming")]
+        public async Task<IActionResult> GetUpcomingReservations()
+        {
+            try
+            {
+                var upcomingReservations = await _repo.GetUpcomingReservations();
+
+                if (upcomingReservations == null || !upcomingReservations.Any())
+                {
+                    return NoContent();
+                }
+
+                return Ok(upcomingReservations);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"An error occurred: {ex.Message}");
+            }
+        }
     }
 }
 
