@@ -10,6 +10,7 @@ import { Box, Button, Dialog, Separator, TextField } from "@radix-ui/themes";
 import { NewReservation } from "./api";
 import { useEmailValidation } from "../hooks/useEmailValidation";
 import styled from "styled-components";
+import { checkRoomAvailability } from "../utils/roomAvailability";
 
 interface BookingDetailsModalProps {
   roomNumber: string;
@@ -20,7 +21,6 @@ interface BookingFormProps {
   roomNumber: string;
   onSubmit: (booking: NewReservation) => void;
 }
-
 
 export function BookingDetailsModal({
   roomNumber,
@@ -77,24 +77,39 @@ const ErrorMessage = styled.div`
   font-size: 0.9rem;
 `;
 
+
 function BookingForm({ roomNumber, onSubmit }: BookingFormProps) {
   const { email, error: emailError, handleEmailChange } = useEmailValidation("");
   const [dateRange, setDateRange] = useState<[Date | null, Date | null]>([null, null]);
-
-
-
   const [focusedInput, setFocusedInput] = useState<FocusedInput | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
+  const [bookingError, setBookingError] = useState<string | null>(null);
+  const [roomAvailable, setRoomAvailable] = useState<boolean | null>(null);
   const showProcessingToast = useShowInfoToast("Processing booking...");
   const showNoInfoToast = useShowInfoToast("Missing email or dates.");
+  const showRoomUnavailableToast = useShowInfoToast("Room is unavailable for the selected dates.");
 
   const isEmailValid = email && !emailError ? true : false;
   const areDatesValid = dateRange[0] && dateRange[1] && !dateError ? true : false;
 
-  function handleSubmit(evt: React.MouseEvent<HTMLButtonElement>) {
+  async function handleSubmit(evt: React.MouseEvent<HTMLButtonElement>) {
     if (!email || !dateRange[0] || !dateRange[1]) {
       showNoInfoToast();
       evt.preventDefault();
+      return false;
+    }
+
+    const isAvailable = await checkRoomAvailability(
+      roomNumber,
+      dateRange[0].toISOString().split('T')[0],
+      dateRange[1].toISOString().split('T')[0]
+    );
+
+    if (!isAvailable) {
+      showRoomUnavailableToast();
+      setRoomAvailable(false);
+      setBookingError("Room is already booked for the selected dates.");      
+      alert("room is unavailable");
       return false;
     }
 
@@ -110,8 +125,8 @@ function BookingForm({ roomNumber, onSubmit }: BookingFormProps) {
 
   function handleDateChange(data: OnDatesChangeProps) {
     const { startDate, endDate } = data;
-
     setDateRange([startDate || null, endDate || null]);
+
 
     if (startDate && endDate) {
       const differenceInTime = endDate.getTime() - startDate.getTime();
@@ -123,9 +138,18 @@ function BookingForm({ roomNumber, onSubmit }: BookingFormProps) {
         setDateError("Booking cannot be longer than 30 days.");
       } else {
         setDateError(null);
+
+        checkRoomAvailability(
+          roomNumber,
+          startDate.toISOString().split('T')[0],
+          endDate.toISOString().split('T')[0] 
+        ).then(available => {
+          setRoomAvailable(available); 
+        });
       }
     } else {
       setDateError(null);
+      setRoomAvailable(null);
     }
 
     if (!startDate) {
@@ -135,9 +159,6 @@ function BookingForm({ roomNumber, onSubmit }: BookingFormProps) {
     } else {
       setFocusedInput(null);
     }
-
-
-
   }
 
   return (
@@ -158,7 +179,7 @@ function BookingForm({ roomNumber, onSubmit }: BookingFormProps) {
       </EmailContainer>
       {emailError && <ErrorMessage>{emailError}</ErrorMessage>}
 
-      <DateRangeContainer isValid={areDatesValid}>
+      <DateRangeContainer isValid={roomAvailable !== null && roomAvailable}>
         <DateRangeInput
           vertical
           showSelectedDates={false}
@@ -176,6 +197,7 @@ function BookingForm({ roomNumber, onSubmit }: BookingFormProps) {
       </DateRangeContainer>
 
       {dateError && <ErrorMessage>{dateError}</ErrorMessage>}
+      {bookingError && <ErrorMessage>{bookingError}</ErrorMessage>}
 
       <BottomRightBox>
         <Dialog.Close>
@@ -184,7 +206,7 @@ function BookingForm({ roomNumber, onSubmit }: BookingFormProps) {
             color="mint"
             mt="4"
             onClick={handleSubmit}
-            disabled={!email || !areDatesValid || !isEmailValid}
+            disabled={!email || !areDatesValid || !isEmailValid || roomAvailable === null || !roomAvailable}
           >
             Reserve
           </Button>

@@ -3,6 +3,7 @@ using Models;
 using Models.Errors;
 using Models.Validators;
 using Repositories;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Controllers
 {
@@ -12,12 +13,14 @@ namespace Controllers
         private RoomRepository _repo { get; set; }
         private readonly RoomValidator _roomValidator;
         private readonly ILogger<RoomController> _logger;
+        private readonly IMemoryCache _cache;
 
-        public RoomController(RoomRepository roomRepository, RoomValidator roomValidator, ILogger<RoomController> logger)
+        public RoomController(RoomRepository roomRepository, RoomValidator roomValidator, ILogger<RoomController> logger, IMemoryCache memoryCache)
         {
             _repo = roomRepository;
             _roomValidator = roomValidator;
             _logger = logger;
+            _cache = memoryCache;
         }
 
         [HttpGet, Produces("application/json"), Route("")]
@@ -116,6 +119,29 @@ namespace Controllers
             var deleted = await _repo.DeleteRoom(roomNumber);
 
             return deleted ? NoContent() : NotFound();
+        }
+
+        [HttpGet, Produces("application/json"), Route("checkRoomAvailability")]
+        public async Task<ActionResult> CheckRoomAvailability(string roomNumber, string startDate, string endDate)
+        {
+            try
+            {
+                string cacheKey = $"{roomNumber}_{startDate}_{endDate}";
+
+                if (!_cache.TryGetValue(cacheKey, out bool isAvailable))
+                {
+                    isAvailable = await _repo.CheckRoomAvailability(roomNumber, startDate, endDate);
+
+                    _cache.Set(cacheKey, isAvailable, TimeSpan.FromMinutes(15));
+                }
+
+                return Json(new { available = isAvailable });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while checking room availability.");
+                return StatusCode(500, "An error occurred while checking availability.");
+            }
         }
     }
 }
